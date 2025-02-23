@@ -1,0 +1,43 @@
+# Node.js 관련
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 환경 변수 파일 (보안 정보)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 로그 및 빌드 관련
+logs/
+*.log
+logs/*.log
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Next.js 빌드/캐시 파일
+.client/.next/
+.client/out/
+.client/.vercel/
+.client/.turbo/
+
+# Express 빌드/캐시 파일
+server/build/
+server/dist/
+server/.cache/
+
+# Editor 관련
+.vscode/
+.idea/
+.DS_Store
+
+# OS 관련
+Thumbs.db
+
+# GitHub Actions 관련 (워크플로우 캐시)
+.github/workflows/.cache/

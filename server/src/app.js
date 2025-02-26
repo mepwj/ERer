@@ -1,15 +1,13 @@
+// Express 설정 파일
+require("dotenv").config();
 const express = require("express");
-const cors = require("cors");
-const morgan = require("morgan");
-
+const applyMiddleware = require("./middleware");
 const statusRoutes = require("./routes/status");
 
 const app = express();
 
-// 미들웨어 설정
-app.use(cors()); // CORS 설정
-app.use(morgan("dev")); // HTTP 요청 로그
-app.use(express.json()); // JSON 요청 본문 파싱
+// 미들웨어 적용
+applyMiddleware(app);
 
 // 라우트 설정
 app.use("/api/status", statusRoutes);

@@ -1,4 +1,3 @@
-// MongoDB 연결 설정 파일
 const mongoose = require("mongoose");
 
 const connectDB = async () => {
@@ -19,8 +18,11 @@ const connectDB = async () => {
       `mongodb://${dbUsername}:${encodeURIComponent(dbPassword)}@`
     );
 
+    console.log("⏳ MongoDB 연결 시도 중..."); // 연결 시도 로그 추가
+
     await mongoose.connect(mongoURI);
-    console.log("✅ MongoDB Connected");
+
+    console.log("✅ MongoDB Connected"); // 연결 성공 시 로그
   } catch (err) {
     console.error("❌ MongoDB Connection Error:", err);
     process.exit(1); // 오류 발생 시 프로세스 종료

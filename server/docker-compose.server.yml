@@ -1,0 +1,12 @@
+version: "3"
+services:
+  server:
+    container_name: erer-server
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000" # 호스트 포트:컨테이너 포트
+    env_file:
+      - .env # 환경 변수 적용
+    restart: always # 재시작 정책 설정

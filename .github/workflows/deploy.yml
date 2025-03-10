@@ -1,0 +1,98 @@
+name: Deploy ERer # 워크플로 이름 설정
+
+on:
+  push:
+    branches:
+      - main # main 브랜치에 push가 발생하면 실행
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest # Ubuntu 최신 버전에서 실행
+    outputs:
+      client: ${{ steps.filter.outputs.client }} # client 디렉토리 변경 여부 출력
+      server: ${{ steps.filter.outputs.server }} # server 디렉토리 변경 여부 출력
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4 # 저장소의 코드를 체크아웃
+
+      - name: Check changed files
+        id: filter
+        uses: dorny/paths-filter@v3 # 변경된 파일 경로 필터링
+        with:
+          filters: |
+            client:
+              - 'client/**' # client 디렉토리 내 파일 변경 감지
+            server:
+              - 'server/**' # server 디렉토리 내 파일 변경 감지
+
+  build-client:
+    needs: changes # changes 작업 이후 실행
+    if: ${{ needs.changes.outputs.client == 'true' }} # client 디렉토리 변경 시 실행
+    runs-on: ubuntu-latest # Ubuntu 최신 버전에서 실행
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4 # 저장소의 코드를 체크아웃
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin # GHCR 로그인
+
+      - name: Build and push client image to GHCR
+        run: |
+          docker build -t ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-client:latest ./client # Docker 이미지 빌드
+          docker push ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-client:latest # GHCR에 이미지 푸시
+
+  build-server:
+    needs: changes # changes 작업 이후 실행
+    if: ${{ needs.changes.outputs.server == 'true' }} # server 디렉토리 변경 시 실행
+    runs-on: ubuntu-latest # Ubuntu 최신 버전에서 실행
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4 # 저장소의 코드를 체크아웃
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin # GHCR 로그인
+
+      - name: Build and push server image to GHCR
+        run: |
+          docker build -t ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest ./server # Docker 이미지 빌드
+          docker push ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest # GHCR에 이미지 푸시
+
+  deploy-client:
+    needs: build-client # client 빌드 작업 이후 실행
+    if: ${{ needs.changes.outputs.client == 'true' }} # client 디렉토리 변경 시 실행
+    runs-on: ubuntu-latest # Ubuntu 최신 버전에서 실행
+    steps:
+      - name: Deploy client to EC2
+        uses: appleboy/ssh-action@v1.0.3 # SSH 접속을 위한 GitHub Action 사용
+        with:
+          host: ${{ secrets.EC2_HOST }} # EC2 인스턴스 IP 설정
+          username: ${{ secrets.EC2_USERNAME }} # EC2 접속 사용자명 설정
+          key: ${{ secrets.EC2_SSH_KEY }} # EC2 SSH 키 설정
+          script: |
+            echo "Pulling latest client image..."
+            docker stop erer-client || true # 실행 중인 클라이언트 컨테이너 중지 (없어도 에러 발생 방지)
+            docker rm erer-client || true # 기존 클라이언트 컨테이너 삭제 (없어도 에러 발생 방지)
+            docker rmi ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-client:latest || true # 기존 클라이언트 이미지 삭제 (없어도 에러 발생 방지)
+            docker pull ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-client:latest # 최신 클라이언트 이미지 pull
+            docker run -d --name erer-client -p 3000:3000 --restart always ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-client:latest # 클라이언트 컨테이너 실행
+
+  deploy-server:
+    needs: build-server # server 빌드 작업 이후 실행
+    if: ${{ needs.changes.outputs.server == 'true' }} # server 디렉토리 변경 시 실행
+    runs-on: ubuntu-latest # Ubuntu 최신 버전에서 실행
+    steps:
+      - name: Deploy server to EC2
+        uses: appleboy/ssh-action@v1.0.3 # SSH 접속을 위한 GitHub Action 사용
+        with:
+          host: ${{ secrets.EC2_HOST }} # EC2 인스턴스 IP 설정
+          username: ${{ secrets.EC2_USERNAME }} # EC2 접속 사용자명 설정
+          key: ${{ secrets.EC2_SSH_KEY }} # EC2 SSH 키 설정
+          script: |
+            echo "Pulling latest server image..."
+            docker stop erer-server || true # 실행 중인 서버 컨테이너 중지 (없어도 에러 발생 방지)
+            docker rm erer-server || true # 기존 서버 컨테이너 삭제 (없어도 에러 발생 방지)
+            docker rmi ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest || true # 기존 서버 이미지 삭제 (없어도 에러 발생 방지)
+            docker pull ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest # 최신 서버 이미지 pull
+            docker run -d --name erer-server -p 5000:5000 --restart always ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest # 서버 컨테이너 실행

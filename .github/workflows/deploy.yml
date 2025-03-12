@@ -32,7 +32,7 @@ jobs:
           echo "=== Checking .env file ==="
           cat "$GITHUB_WORKSPACE/server/.env"
           echo "=== End of .env file ==="
-
+      
       - name: Build and push server image to GHCR
         run: |
           docker build -t ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest ./server
@@ -42,6 +42,29 @@ jobs:
     needs: build-server
     runs-on: ubuntu-latest
     steps:
+      - name: Copy .env to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "${{ github.workspace }}/server/.env"
+          target: "/home/ubuntu"
+          strip_components: 0
+          overwrite: true
+          debug: true
+
+      - name: List files after transfer (on EC2)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "=== Checking files on EC2 ==="
+            ls -la /home/ubuntu
+            echo "=== End of file check ==="
+
       - name: Deploy server to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -50,11 +73,15 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             echo "🚀 Deploying server..."
+            if [ -f "/home/ubuntu/.env" ]; then
+              echo ".env file exists ✅"
+            else
+              echo "❌ .env file missing on EC2"
+              exit 1
+            fi
             docker stop erer-server || true
             docker rm erer-server || true
             docker rmi ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest || true
             docker pull ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest
-            docker run -d --name erer-server -p 5000:5000 --restart always \
-              --env-file /home/ubuntu/.env \
-              ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest
+            docker run -d --name erer-server -p 5000:5000 --env-file /home/ubuntu/.env ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest
             echo "✅ Server deployed successfully"

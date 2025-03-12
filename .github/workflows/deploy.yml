@@ -27,7 +27,7 @@ jobs:
 
   build-client:
     needs: changes
-    if: ${{ needs.changes.outputs.client == 'true' }}
+    # if: ${{ needs.changes.outputs.client == 'true' }} # 변경 사항 조건 주석 처리 → 항상 실행
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -60,7 +60,7 @@ jobs:
 
   build-server:
     needs: changes
-    if: ${{ needs.changes.outputs.server == 'true' }}
+    # if: ${{ needs.changes.outputs.server == 'true' }} # 변경 사항 조건 주석 처리 → 항상 실행
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -93,7 +93,7 @@ jobs:
 
   deploy-client:
     needs: build-client
-    if: ${{ needs.changes.outputs.client == 'true' }}
+    # if: ${{ needs.changes.outputs.client == 'true' }} # 변경 사항 조건 주석 처리 → 항상 실행
     runs-on: ubuntu-latest
     steps:
       - name: Deploy client to EC2
@@ -115,7 +115,7 @@ jobs:
 
   deploy-server:
     needs: build-server
-    if: ${{ needs.changes.outputs.server == 'true' }}
+    # if: ${{ needs.changes.outputs.server == 'true' }} # 변경 사항 조건 주석 처리 → 항상 실행
     runs-on: ubuntu-latest
     steps:
       - name: Deploy server to EC2

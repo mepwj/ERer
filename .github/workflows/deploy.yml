@@ -18,29 +18,19 @@ jobs:
 
       - name: Create .env file
         run: |
-          echo "Creating .env file..."
-          rm -f ${{ github.workspace }}/server/.env
-          cat <<EOF > ${{ github.workspace }}/server/.env
-          DB_URL=${{ secrets.DB_URL }}
-          DB_USERNAME=${{ secrets.DB_USERNAME }}
-          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-          PORT=5000
-          API_KEY=${{ secrets.API_KEY }}
-          API_URL=${{ secrets.API_URL }}
-          CURRENT_SEASON=${{ secrets.CURRENT_SEASON }}
-          EOF
+          echo "DB_URL=${{ secrets.DB_URL }}" >> $GITHUB_WORKSPACE/server/.env
+          echo "DB_USERNAME=${{ secrets.DB_USERNAME }}" >> $GITHUB_WORKSPACE/server/.env
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> $GITHUB_WORKSPACE/server/.env
+          echo "PORT=5000" >> $GITHUB_WORKSPACE/server/.env
+          echo "API_KEY=${{ secrets.API_KEY }}" >> $GITHUB_WORKSPACE/server/.env
+          echo "API_URL=${{ secrets.API_URL }}" >> $GITHUB_WORKSPACE/server/.env
+          echo "CURRENT_SEASON=${{ secrets.CURRENT_SEASON }}" >> $GITHUB_WORKSPACE/server/.env
           echo ".env file created successfully ✅"
 
       - name: Debug .env file
         run: |
           echo "=== Checking .env file ==="
-          if [ -f "${{ github.workspace }}/server/.env" ]; then
-            echo ".env file exists ✅"
-            cat "${{ github.workspace }}/server/.env"
-          else
-            echo "❌ .env file is missing!"
-            exit 1
-          fi
+          cat "$GITHUB_WORKSPACE/server/.env"
           echo "=== End of .env file ==="
 
       - name: Build and push server image to GHCR
@@ -52,35 +42,6 @@ jobs:
     needs: build-server
     runs-on: ubuntu-latest
     steps:
-      - name: List files before transfer
-        run: |
-          echo "=== Listing files before transfer ==="
-          ls -la ${{ github.workspace }}/server/
-          echo "=== End of file list ==="
-
-      - name: Copy .env to EC2
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "${{ github.workspace }}/server/.env"   # ✅ 절대 경로 수정
-          target: "/home/ubuntu"                         # ✅ EC2 홈 디렉토리로 전송
-          strip_components: 0
-          overwrite: true
-          debug: true
-
-      - name: List files after transfer (on EC2)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            echo "=== Checking files on EC2 ==="
-            ls -la /home/ubuntu
-            echo "=== End of file check ==="
-
       - name: Deploy server to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -89,12 +50,6 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             echo "🚀 Deploying server..."
-            if [ -f "/home/ubuntu/.env" ]; then
-              echo ".env file exists ✅"
-            else
-              echo "❌ .env file missing on EC2"
-              exit 1
-            fi
             docker stop erer-server || true
             docker rm erer-server || true
             docker rmi ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest || true

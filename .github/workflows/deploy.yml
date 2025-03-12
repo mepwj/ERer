@@ -33,13 +33,15 @@ jobs:
 
       - name: Debug .env file
         run: |
-          if [ -f ${{ github.workspace }}/server/.env ]; then
+          echo "=== Checking .env file ==="
+          if [ -f "${{ github.workspace }}/server/.env" ]; then
             echo ".env file exists ✅"
-            cat ${{ github.workspace }}/server/.env
+            cat "${{ github.workspace }}/server/.env"
           else
-            echo "❌ .env file missing"
+            echo "❌ .env file is missing!"
             exit 1
           fi
+          echo "=== End of .env file ==="
 
       - name: Build and push server image to GHCR
         run: |
@@ -50,6 +52,12 @@ jobs:
     needs: build-server
     runs-on: ubuntu-latest
     steps:
+      - name: List files before transfer
+        run: |
+          echo "=== Listing files before transfer ==="
+          ls -la ${{ github.workspace }}/server/
+          echo "=== End of file list ==="
+
       - name: Copy .env to EC2
         uses: appleboy/scp-action@master
         with:
@@ -61,6 +69,17 @@ jobs:
           strip_components: 0
           overwrite: true
           debug: true
+
+      - name: List files after transfer (on EC2)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "=== Checking files on EC2 ==="
+            ls -la /home/ubuntu
+            echo "=== End of file check ==="
 
       - name: Deploy server to EC2
         uses: appleboy/ssh-action@v1.0.3

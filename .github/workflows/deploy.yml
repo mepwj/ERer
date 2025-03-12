@@ -16,23 +16,6 @@ jobs:
         run: |
           echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
 
-      - name: Create .env file
-        run: |
-          echo "DB_URL=${{ secrets.DB_URL }}" >> $GITHUB_WORKSPACE/server/.env
-          echo "DB_USERNAME=${{ secrets.DB_USERNAME }}" >> $GITHUB_WORKSPACE/server/.env
-          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> $GITHUB_WORKSPACE/server/.env
-          echo "PORT=5000" >> $GITHUB_WORKSPACE/server/.env
-          echo "API_KEY=${{ secrets.API_KEY }}" >> $GITHUB_WORKSPACE/server/.env
-          echo "API_URL=${{ secrets.API_URL }}" >> $GITHUB_WORKSPACE/server/.env
-          echo "CURRENT_SEASON=${{ secrets.CURRENT_SEASON }}" >> $GITHUB_WORKSPACE/server/.env
-          echo ".env file created successfully ✅"
-
-      - name: Debug .env file
-        run: |
-          echo "=== Checking .env file ==="
-          cat "$GITHUB_WORKSPACE/server/.env"
-          echo "=== End of .env file ==="
-      
       - name: Build and push server image to GHCR
         run: |
           docker build -t ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest ./server
@@ -42,29 +25,6 @@ jobs:
     needs: build-server
     runs-on: ubuntu-latest
     steps:
-      - name: Copy .env to EC2
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "${{ github.workspace }}/server/.env"
-          target: "/home/ubuntu"
-          strip_components: 0
-          overwrite: true
-          debug: true
-
-      - name: List files after transfer (on EC2)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            echo "=== Checking files on EC2 ==="
-            ls -la /home/ubuntu
-            echo "=== End of file check ==="
-
       - name: Deploy server to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -73,15 +33,41 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             echo "🚀 Deploying server..."
-            if [ -f "/home/ubuntu/.env" ]; then
-              echo ".env file exists ✅"
-            else
-              echo "❌ .env file missing on EC2"
-              exit 1
-            fi
+
+            # 1. 기존 .env 파일 제거
+            echo "🗑️ Removing old .env file..."
+            rm -f /home/ubuntu/.env || true
+
+            # 2. 새로운 .env 파일 생성
+            echo "✏️ Creating new .env file..."
+            cat <<EOF > /home/ubuntu/.env
+            DB_URL=${{ secrets.DB_URL }}
+            DB_USERNAME=${{ secrets.DB_USERNAME }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            PORT=5000
+            API_KEY=${{ secrets.API_KEY }}
+            API_URL=${{ secrets.API_URL }}
+            CURRENT_SEASON=${{ secrets.CURRENT_SEASON }}
+            EOF
+            echo "✅ .env file created successfully"
+
+            # 3. 기존 컨테이너 중지 및 삭제
+            echo "🛑 Stopping and removing existing container..."
             docker stop erer-server || true
             docker rm erer-server || true
+
+            # 4. 기존 Docker 이미지 삭제
+            echo "🗑️ Removing existing image..."
             docker rmi ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest || true
+
+            # 5. 최신 Docker 이미지 pull
+            echo "⬇️ Pulling latest Docker image..."
             docker pull ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest
-            docker run -d --name erer-server -p 5000:5000 --env-file /home/ubuntu/.env ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest
-            echo "✅ Server deployed successfully"
+
+            # 6. 새 컨테이너 실행
+            echo "🚀 Running new container..."
+            docker run -d --name erer-server -p 5000:5000 \
+              --env-file /home/ubuntu/.env \
+              ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest
+
+            echo "✅ Server deployed successfully!"

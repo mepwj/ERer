@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "ERer",
-  description: "ERer 프로젝트",
+  title: "이터널리턴 전적 검색 - ERer",
+  description: "이터널리턴 전적 검색",
 };
 
 export default function RootLayout({
@@ -10,12 +10,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      {" "}
-      {/* ✅ 한국어 설정 */}
-      <head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      </head>
       <body>{children}</body>
     </html>
   );

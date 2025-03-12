@@ -34,8 +34,8 @@ jobs:
       - name: Create .env file
         run: |
           echo "Creating .env file..."
-          rm -f ./server/.env
-          cat <<EOF > ./server/.env
+          rm -f ${{ github.workspace }}/server/.env
+          cat <<EOF > ${{ github.workspace }}/server/.env
           DB_URL=${{ secrets.DB_URL }}
           DB_USERNAME=${{ secrets.DB_USERNAME }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
@@ -48,11 +48,11 @@ jobs:
 
       - name: Debug .env file
         run: |
-          if [ -f ./server/.env ]; then
-            echo ".env file exists"
-            cat ./server/.env
+          if [ -f ${{ github.workspace }}/server/.env ]; then
+            echo ".env file exists "
+            cat ${{ github.workspace }}/server/.env
           else
-            echo "❌ .env file missing"
+            echo " .env file missing"
             exit 1
           fi
 
@@ -78,7 +78,7 @@ jobs:
             docker rmi ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-client:latest || true
             docker pull ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-client:latest
             docker run -d --name erer-client -p 3000:3000 --restart always ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-client:latest
-            echo "✅ Client deployed successfully"
+            echo "Client deployed successfully"
 
   deploy-server:
     needs: build-server
@@ -90,8 +90,10 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "./server/.env"
-          target: "/home/ubuntu"
+          source: "${{ github.workspace }}/server/.env"  
+          target: "/home/ubuntu"                        
+          strip_components: 0
+          overwrite: true
 
       - name: Deploy server to EC2
         uses: appleboy/ssh-action@v1.0.3
@@ -108,4 +110,4 @@ jobs:
             docker run -d --name erer-server -p 5000:5000 --restart always \
               --env-file /home/ubuntu/.env \
               ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest
-            echo "✅ Server deployed successfully"
+            echo "Server deployed successfully"

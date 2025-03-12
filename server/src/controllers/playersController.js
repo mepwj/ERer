@@ -3,176 +3,310 @@ const axios = require("axios");
 const Player = require("../models/Player");
 const Game = require("../models/Game");
 
-// 플레이어 정보 조회: 닉네임으로 검색 (DB에 있으면 바로 반환, 없으면 외부 API 호출하여 생성 및 갱신)
+// 닉네임으로 플레이어 조회 및 생성
 const getPlayerByNickname = async (req, res) => {
   try {
-    const { nickname } = req.params;
-    console.log(`[LOG] ${nickname}의 유저 정보 조회 요청`);
+    let { nickname } = req.params;
+    if (!nickname) {
+      return res.status(400).json({ error: "닉네임이 필요합니다." });
+    }
+    nickname = decodeURIComponent(nickname);
 
-    // DB에서 해당 닉네임으로 플레이어 검색
-    let player = await Player.findOne({ nickname });
-    if (!player) {
-      console.log(
-        `[LOG] DB에 닉네임 '${nickname}'로 플레이어 정보 없음. 외부 API 호출로 userNum 획득 시도`
-      );
-      const apiKey = process.env.API_KEY;
-      const baseUrl = process.env.API_URL;
+    const apiKey = process.env.API_KEY;
+    const baseUrl = process.env.API_URL;
+    if (!apiKey || !baseUrl) {
+      return res.status(500).json({ error: "API 설정 오류" });
+    }
 
-      // 외부 API 호출: /v1/user/nickname?nickname={nickname}
-      const nicknameResponse = await axios.get(`${baseUrl}/user/nickname`, {
-        headers: { "x-api-key": apiKey },
-        params: { nickname },
-      });
-      console.log(
-        `[LOG] 외부 API '/user/nickname' 응답:`,
-        nicknameResponse.data
-      );
+    // 외부 API에서 userNum 조회
+    const nicknameResponse = await axios.get(`${baseUrl}/user/nickname`, {
+      headers: { "x-api-key": apiKey },
+      params: { query: nickname },
+    });
+    const { user } = nicknameResponse.data;
+    const userNum = user?.userNum;
+    if (!userNum) {
+      return res
+        .status(404)
+        .json({ error: "외부 API에서 유저 번호를 찾을 수 없습니다." });
+    }
 
-      const { userNum } = nicknameResponse.data;
-      if (!userNum) {
-        console.error(`[ERROR] 외부 API에서 userNum을 획득하지 못함`);
-        return res.status(404).json({ error: "유저 번호를 찾을 수 없습니다." });
-      }
-
-      // userNum을 기준으로 DB 재검색 (닉네임 변경 가능성 처리)
-      player = await Player.findOne({ userNum });
-      if (player) {
-        console.log(
-          `[LOG] DB에 userNum '${userNum}'으로 기존 플레이어 정보가 존재합니다. 닉네임 업데이트: ${player.nickname} -> ${nickname}`
-        );
+    // DB에서 플레이어 검색
+    let player = await Player.findOne({ userNum });
+    if (player) {
+      if (player.nickname !== nickname) {
         player.nickname = nickname;
-        await player.save();
-      } else {
-        console.log(
-          `[LOG] DB에 userNum '${userNum}' 정보가 없으므로 새 플레이어를 생성합니다.`
-        );
-        player = new Player({ userNum, nickname });
-        // 신규 플레이어의 경우 외부 API 데이터를 즉시 가져와 최신 상태로 업데이트
-        await updatePlayerData(player);
         await player.save();
       }
     } else {
-      console.log(
-        `[LOG] DB에서 닉네임 '${nickname}'로 플레이어 정보 조회 성공`
-      );
+      // 새 플레이어 생성 후 저장
+      player = new Player({ userNum, nickname });
+      await player.save();
+      return res.status(201).json({
+        message:
+          "새 플레이어가 생성되었습니다. 유저 전적 조회를 위해 refresh 작업이 필요합니다.",
+        playerId: player.userNum,
+        nickname: player.nickname,
+      });
     }
 
-    // 플레이어 정보를 클라이언트에 반환
-    res.status(200).json(player);
+    // 응답 시 games 필드 제거
+    const playerObj = player.toObject();
+    delete playerObj.games;
+    res.status(200).json(playerObj);
   } catch (error) {
-    console.error("[ERROR] getPlayerByNickname error:", error.message);
     res.status(500).json({ error: error.message });
   }
 };
 
-// 별도의 갱신 라우트: 클라이언트가 '갱신' 버튼을 누르면 호출 (동기적으로 최신 데이터를 가져와 DB 업데이트)
+// 통계 데이터 형식 변환
+const formatStats = (stats) => {
+  const formattedStats = {};
+
+  for (const seasonId in stats) {
+    if (stats[seasonId]?.userStats) {
+      const userStats = stats[seasonId].userStats;
+      formattedStats[seasonId] = userStats.map((stat) => {
+        const modeKey = `${stat.matchingMode}v${stat.matchingTeamMode}`;
+        return {
+          seasonId: stat.seasonId,
+          userNum: stat.userNum,
+          nickname: stat.nickname,
+          mmr: stat.mmr || null,
+          rank: stat.rank,
+          rankSize: stat.rankSize,
+          totalGames: stat.totalGames,
+          totalWins: stat.totalWins,
+          averageKills: stat.averageKills,
+          averageAssistants: stat.averageAssistants,
+          averageHunts: stat.averageHunts,
+          rankPercent: stat.rankPercent,
+          top1: stat.top1,
+          top2: stat.top2,
+          top3: stat.top3,
+          top5: stat.top5,
+          top7: stat.top7,
+          modes: {
+            [modeKey]: {
+              rank: stat.rank,
+              rankSize: stat.rankSize,
+              totalGames: stat.totalGames,
+              totalWins: stat.totalWins,
+              averageRank: stat.averageRank,
+              averageKills: stat.averageKills,
+              characterStats: stat.characterStats.map((char) => ({
+                characterCode: char.characterCode,
+                totalGames: char.totalGames,
+                maxKillings: char.maxKillings,
+                averageRank: char.averageRank,
+                top3Rate: char.top3Rate,
+                wins: char.wins,
+              })),
+            },
+          },
+        };
+      });
+    }
+  }
+
+  return formattedStats;
+};
+
+// 플레이어 데이터 갱신 (동기 처리)
 const refreshPlayerData = async (req, res) => {
   try {
     const { nickname } = req.params;
-    console.log(`[LOG] '${nickname}'의 데이터 갱신 요청`);
-
-    // DB에서 플레이어 검색
+    // 플레이어 정보 검색
     let player = await Player.findOne({ nickname });
     if (!player) {
-      console.log(
-        `[LOG] DB에 닉네임 '${nickname}'의 플레이어 정보가 없습니다. 먼저 getPlayerByNickname을 통해 생성 후 갱신하세요.`
-      );
       return res.status(404).json({
         error:
           "플레이어 정보가 DB에 없습니다. 먼저 플레이어 정보를 생성하세요.",
       });
     }
 
-    // 외부 API에서 최신 데이터를 동기적으로 가져와 DB 업데이트
-    await updatePlayerData(player);
-    console.log(`[LOG] '${nickname}'의 외부 API 데이터를 갱신하였습니다.`);
-
-    // 갱신된 플레이어 정보 반환
-    res.status(200).json(player);
-  } catch (error) {
-    console.error("[ERROR] refreshPlayerData error:", error.message);
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// 외부 API에서 최신 데이터를 가져와 플레이어의 stats와 게임 전적을 업데이트하는 함수
-async function updatePlayerData(player) {
-  try {
     const apiKey = process.env.API_KEY;
     const baseUrl = process.env.API_URL;
-    const userNum = player.userNum;
+    if (!baseUrl) throw new Error("API_URL 환경 변수가 설정되지 않았습니다.");
+    if (!apiKey) throw new Error("API_KEY 환경 변수가 설정되지 않았습니다.");
 
-    // 시즌 관련: 현재 시즌, 일반게임(0), 코발트 프로토콜(6), 유니온 대전(8)
-    const seasonIds = [
-      process.env.CURRENT_SEASON, // 예: "2025-03" 등 환경변수에 설정된 현재 시즌 ID
-      "0", // 일반 게임
-      "6", // 코발트 프로토콜
-      "8", // 유니온 대전
-    ];
+    // 기존 게임 ID 목록 (중복 체크)
+    const existingGameIds = new Set(player.games);
+    let newGamesCount = 0;
+    let next = "";
 
+    // 한 페이지의 게임 데이터 처리
+    const response = await axios.get(
+      `${baseUrl}/user/games/${player.userNum}`,
+      {
+        headers: { "x-api-key": apiKey },
+        params: { next },
+      }
+    );
+    const data = response.data;
+    if (data.userGames) {
+      let newGameFoundInPage = false;
+      for (const gameSummary of data.userGames) {
+        const gameId = gameSummary.gameId;
+        if (existingGameIds.has(gameId)) {
+          continue;
+        } else {
+          // 게임 상세 정보 조회
+          const gameResponse = await axios.get(`${baseUrl}/games/${gameId}`, {
+            headers: { "x-api-key": apiKey },
+          });
+          const gameResponseData = gameResponse.data;
+          const transformedGameData = {
+            gameid:
+              gameResponseData.userGames &&
+              gameResponseData.userGames.length > 0
+                ? gameResponseData.userGames[0].gameId
+                : gameId,
+            userGames: gameResponseData.userGames,
+          };
+          // 게임 저장
+          const newGame = new Game(transformedGameData);
+          await newGame.save();
+          player.games.push(gameId);
+          existingGameIds.add(gameId);
+          newGamesCount++;
+          newGameFoundInPage = true;
+        }
+      }
+      next = data.next || "";
+      if (!newGameFoundInPage) {
+        next = "";
+      }
+    }
+
+    // 통계 데이터 갱신
+    const seasonIds = [process.env.CURRENT_SEASON, "0"];
     let statsData = {};
-    // 각 시즌별 스탯 데이터를 가져옴
     for (let seasonId of seasonIds) {
-      console.log(
-        `[LOG] [stats] API 호출: userNum=${userNum}, seasonId=${seasonId}`
-      );
       const response = await axios.get(
-        `${baseUrl}/user/stats/${userNum}/${seasonId}`,
+        `${baseUrl}/user/stats/${player.userNum}/${seasonId}`,
         { headers: { "x-api-key": apiKey } }
       );
       statsData[seasonId] = response.data;
     }
-
-    // 게임 전적 데이터: 페이지네이션 적용해서 모든 페이지의 데이터를 가져옴
-    let allGamesData = [];
-    let next = "";
-    do {
-      console.log(`[LOG] [games] API 호출: userNum=${userNum}, next=${next}`);
-      const response = await axios.get(`${baseUrl}/user/games/${userNum}`, {
-        headers: { "x-api-key": apiKey },
-        params: { next },
-      });
-      const data = response.data;
-      if (data.userGames) {
-        allGamesData = allGamesData.concat(data.userGames);
-      }
-      next = data.next || "";
-    } while (next);
-
-    // 각 게임의 상세 정보를 조회하여 DB의 Game 컬렉션에 저장
-    for (let gameSummary of allGamesData) {
-      const gameId = gameSummary.gameId;
-      // DB에서 해당 gameId 검색
-      let game = await Game.findOne({ gameId });
-      if (!game) {
-        console.log(
-          `[LOG] [game 상세] 새로운 게임(${gameId}) 정보를 외부 API 호출로 획득`
-        );
-        const gameResponse = await axios.get(`${baseUrl}/games/${gameId}`, {
-          headers: { "x-api-key": apiKey },
-        });
-        // 게임 상세 데이터를 Game 모델에 저장 (필요한 데이터만 선별해서 저장)
-        game = new Game(gameResponse.data);
-        await game.save();
-      } else {
-        console.log(
-          `[LOG] [game 상세] 기존 게임(${gameId}) 정보가 있으므로 업데이트 생략`
-        );
-        // 선택 사항: 이미 저장된 게임 데이터가 오래되었다면 업데이트 로직 추가 가능
-      }
-    }
-
-    // 플레이어 객체에 스탯과 게임 목록(게임ID 배열) 업데이트
-    player.stats = statsData;
-    player.games = allGamesData.map((game) => game.gameId);
+    player.stats = formatStats(statsData);
+    player.lastRefresh = new Date();
     await player.save();
 
-    console.log(
-      `[LOG] 플레이어 ${player.nickname} (userNum: ${userNum}) 데이터 갱신 완료`
-    );
-  } catch (error) {
-    console.error("[ERROR] updatePlayerData error:", error.message);
-  }
-}
+    // 클라이언트 응답
+    res.status(200).json({
+      message: `${newGamesCount}개의 게임 데이터가 갱신되었습니다.`,
+      updatedGames: newGamesCount,
+      lastRefresh: player.lastRefresh,
+    });
 
-module.exports = { getPlayerByNickname, refreshPlayerData };
+    // 백그라운드에서 나머지 페이지 처리
+    if (next) {
+      processRemainingGames(player, next, apiKey, baseUrl, existingGameIds)
+        .then(() => {})
+        .catch((err) => {});
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// 백그라운드에서 나머지 게임 데이터 처리
+const processRemainingGames = async (
+  player,
+  next,
+  apiKey,
+  baseUrl,
+  existingGameIds
+) => {
+  while (next) {
+    try {
+      const response = await axios.get(
+        `${baseUrl}/user/games/${player.userNum}`,
+        {
+          headers: { "x-api-key": apiKey },
+          params: { next },
+        }
+      );
+      const data = response.data;
+      let newGameFoundInPage = false;
+      if (data.userGames) {
+        for (const gameSummary of data.userGames) {
+          const gameId = gameSummary.gameId;
+          if (existingGameIds.has(gameId)) {
+            continue;
+          }
+          const gameResponse = await axios.get(`${baseUrl}/games/${gameId}`, {
+            headers: { "x-api-key": apiKey },
+          });
+          const gameResponseData = gameResponse.data;
+          const transformedGameData = {
+            gameid:
+              gameResponseData.userGames &&
+              gameResponseData.userGames.length > 0
+                ? gameResponseData.userGames[0].gameId
+                : gameId,
+            userGames: gameResponseData.userGames,
+          };
+          const newGame = new Game(transformedGameData);
+          await newGame.save();
+          player.games.push(gameId);
+          existingGameIds.add(gameId);
+          newGameFoundInPage = true;
+        }
+      }
+      await player.save();
+      if (!newGameFoundInPage) {
+        break;
+      }
+      next = data.next || "";
+    } catch (err) {
+      break;
+    }
+  }
+};
+
+// 닉네임으로 플레이어 게임 데이터 조회 (페이지네이션 적용)
+const getPlayerGamesByNickname = async (req, res) => {
+  try {
+    let { nickname } = req.params;
+    if (!nickname) {
+      return res.status(400).json({ error: "닉네임이 필요합니다." });
+    }
+    nickname = decodeURIComponent(nickname);
+    const player = await Player.findOne({ nickname });
+    if (!player) {
+      return res
+        .status(404)
+        .json({ error: "플레이어 정보를 찾을 수 없습니다." });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const reversedGameIds = player.games.slice().reverse();
+    const start = (page - 1) * limit;
+    const paginatedGameIds = reversedGameIds.slice(start, start + limit);
+    const games = await Game.find({ gameid: { $in: paginatedGameIds } });
+    const orderedGames = paginatedGameIds.map((id) =>
+      games.find((game) => game.gameid.toString() === id.toString())
+    );
+
+    return res.status(200).json({
+      data: orderedGames,
+      pagination: {
+        page,
+        limit,
+        total: player.games.length,
+        totalPages: Math.ceil(player.games.length / limit),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+module.exports = {
+  getPlayerGamesByNickname,
+  getPlayerByNickname,
+  refreshPlayerData,
+};

@@ -1,0 +1,115 @@
+name: Deploy ERer Server
+
+# main 브랜치에 push 발생 시 실행
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # server 디렉토리 내 변경 사항 감지
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 변경 사항 확인
+        id: filter
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            server:
+              - 'server/**'
+
+  # server 디렉토리 변경이 감지되면 빌드 실행
+  build-server:
+    needs: changes
+    if: ${{ needs.changes.outputs.server == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: GHCR 로그인
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
+          if [ $? -ne 0 ]; then
+            echo "❌ GHCR 로그인 실패"
+            exit 1
+          fi
+          echo "✅ GHCR 로그인 성공"
+
+      - name: 서버 이미지 빌드 및 GHCR에 푸시
+        run: |
+          echo "🏗️ 서버 이미지 빌드 중..."
+          docker build -t ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest ./server
+          echo "🚀 서버 이미지를 GHCR에 푸시 중..."
+          docker push ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest
+
+      - name: 푸시한 서버 이미지 확인
+        run: |
+          echo "🔎 GHCR에 서버 이미지 확인 중..."
+          curl -H "Authorization: Bearer ${{ secrets.GHCR_TOKEN }}" https://ghcr.io/v2/${{ secrets.GHCR_USERNAME }}/erer-server/tags/list || {
+            echo "❌ GHCR에서 서버 이미지 확인 실패"
+            exit 1
+          }
+          echo "✅ GHCR에 서버 이미지 확인 완료"
+
+  # 빌드 완료 후 EC2에 배포
+  deploy-server:
+    needs: build-server
+    runs-on: ubuntu-latest
+    steps:
+      - name: 서버 EC2 배포
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "🚀 서버 배포 시작..."
+
+            # ✅ 기존 컨테이너 중지 및 삭제
+            echo "🛑 기존 서버 컨테이너 중지 및 삭제 중..."
+            docker stop erer-server || true
+            docker rm erer-server || true
+
+            # ✅ 기존 Docker 이미지 삭제
+            echo "🗑️ 기존 Docker 이미지 삭제 중..."
+            docker rmi ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest || true
+
+            # ✅ 최신 Docker 이미지 가져오기
+            echo "⬇️ 최신 서버 Docker 이미지 가져오는 중..."
+            docker pull ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest || {
+              echo "❌ 서버 이미지 가져오기 실패"
+              exit 1
+            }
+            echo "✅ 서버 이미지 가져오기 완료"
+
+            # ✅ 기존 .env 파일 제거
+            echo "🗑️ 기존 .env 파일 삭제 중..."
+            rm -f /home/ubuntu/.env || true
+
+            # ✅ 새로운 .env 파일 생성
+            echo "✏️ 새로운 .env 파일 생성 중..."
+            cat <<EOF > /home/ubuntu/.env
+            DB_URL=${{ secrets.DB_URL }}
+            DB_USERNAME=${{ secrets.DB_USERNAME }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            PORT=5000
+            API_KEY=${{ secrets.API_KEY }}
+            API_URL=${{ secrets.API_URL }}
+            CURRENT_SEASON=${{ secrets.CURRENT_SEASON }}
+            EOF
+            echo "✅ .env 파일 생성 완료"
+
+            # ✅ 새 컨테이너 실행
+            echo "🚀 새로운 서버 컨테이너 실행 중..."
+            docker run -d --name erer-server -p 5000:5000 \
+              --env-file /home/ubuntu/.env \
+              ghcr.io/${{ secrets.GHCR_USERNAME }}/erer-server:latest
+
+            echo "✅ 서버 배포 완료!"

@@ -1,1 +1,50 @@
 @import "bootstrap/dist/css/bootstrap.min.css";
+
+:root[data-theme="light"] {
+  --primary-bg: #ffffff;
+  --secondary-bg: #f8f9fa;
+  --text-color: #333333;
+  --border-color: #dee2e6;
+  --text-muted: #6c757d;
+}
+
+:root[data-theme="dark"] {
+  --primary-bg: rgb(53, 64, 82);
+  --secondary-bg: rgb(43, 54, 72);
+  --text-color: #ffffff;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --text-muted: #a1a1a1;
+}
+
+body {
+  background-color: var(--primary-bg);
+  color: var(--text-color);
+}
+
+.bg-theme-secondary {
+  background-color: var(--secondary-bg);
+}
+
+.text-theme {
+  color: var(--text-color) !important;
+}
+
+.border-theme {
+  border-color: var(--border-color) !important;
+}
+
+.bg-primary-dark {
+  background-color: var(--secondary-bg);
+}
+
+.hover-underline:hover {
+  text-decoration: underline !important;
+}
+
+.list-group-item {
+  transition: background-color 0.3s ease;
+}
+
+.list-group-item:hover {
+  background-color: var(--primary-bg) !important;
+}

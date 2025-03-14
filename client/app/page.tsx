@@ -4,26 +4,38 @@ import Announcements from "./components/Announcements";
 
 export default function Home() {
   const eternalReturnAnnouncements = [
-    { title: "공지사항(1)", content: "업데이트 내용(1)", date: "1일 전" },
-    { title: "공지사항(2)", content: "업데이트 내용(2)", date: "3일 전" },
-    { title: "공지사항(3)", content: "업데이트 내용(3)", date: "5일 전" },
+    {
+      title: "공지사항(1) - 업데이트 내용(1)",
+      date: "2023-09-01",
+      url: "https://www.google.com",
+    },
+    {
+      title: "공지사항(2) - 업데이트 내용(2)",
+      date: "2023-08-30",
+      url: "https://www.naver.com",
+    },
+    {
+      title: "공지사항(3) - 업데이트 내용(3)",
+      date: "2023-08-28",
+      url: "https://www.github.com",
+    },
   ];
 
   const ererAnnouncements = [
     {
-      title: "25/01/24 업데이트",
-      content: "업데이트 내용(1)",
-      date: "49일 전",
+      title: "25/01/24 업데이트 - 업데이트 내용(1)",
+      date: "2023-07-15",
+      url: "https://www.google.com",
     },
     {
-      title: "25/01/22 업데이트",
-      content: "업데이트 내용(2)",
-      date: "51일 전",
+      title: "25/01/22 업데이트 - 업데이트 내용(2)",
+      date: "2023-07-13",
+      url: "https://www.naver.com",
     },
     {
-      title: "25/01/09 업데이트",
-      content: "업데이트 내용(3)",
-      date: "64일 전",
+      title: "25/01/09 업데이트 - 업데이트 내용(3)",
+      date: "2023-06-30",
+      url: "https://www.github.com",
     },
   ];
 
@@ -48,8 +60,10 @@ export default function Home() {
 
       {/* 공지사항 출력 */}
       <Announcements
-        eternalReturnAnnouncements={eternalReturnAnnouncements}
-        ererAnnouncements={ererAnnouncements}
+        announcements={{
+          eternalReturn: eternalReturnAnnouncements,
+          erer: ererAnnouncements,
+        }}
       />
     </div>
   );

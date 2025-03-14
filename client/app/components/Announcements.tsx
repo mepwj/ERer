@@ -1,50 +1,62 @@
 "use client";
 
-import AnnouncementItem from "./AnnouncementItem";
-
 interface Announcement {
   title: string;
-  content: string;
   date: string;
+  url: string;
 }
 
 interface AnnouncementsProps {
-  eternalReturnAnnouncements: Announcement[];
-  ererAnnouncements: Announcement[];
+  announcements: {
+    eternalReturn: Announcement[];
+    erer: Announcement[];
+  };
 }
 
-export default function Announcements({
-  eternalReturnAnnouncements,
-  ererAnnouncements,
-}: AnnouncementsProps) {
+interface AnnouncementItemProps extends Announcement {}
+
+function AnnouncementItem({ title, date, url }: AnnouncementItemProps) {
+  return (
+    <li className="list-group-item d-flex justify-content-between align-items-center list-group-item-action bg-theme-secondary border-theme">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-decoration-none text-theme"
+      >
+        <strong>{title}</strong>
+      </a>
+      <span className="text-theme opacity-75">{date}</span>
+    </li>
+  );
+}
+
+export default function Announcements({ announcements }: AnnouncementsProps) {
   return (
     <div className="container mt-5">
       <div className="row">
-        {/* Eternal Return 공지사항 */}
         <div className="col-md-6">
-          <h2 className="text-primary mb-3">Eternal Return 공지사항</h2>
+          <h3 className="text-theme mb-3">Eternal Return 공지사항</h3>
           <ul className="list-group">
-            {eternalReturnAnnouncements.map((announcement, index) => (
+            {announcements.eternalReturn.map((announcement, index) => (
               <AnnouncementItem
                 key={index}
                 title={announcement.title}
-                content={announcement.content}
                 date={announcement.date}
+                url={announcement.url}
               />
             ))}
           </ul>
         </div>
-
-        {/* ERer 공지사항 */}
         <div className="col-md-6">
-          <h2 className="text-primary mb-3">ERer 공지사항</h2>
+          <h3 className="text-theme mb-3">ERer 공지사항</h3>
           <ul className="list-group">
-            {ererAnnouncements.map((announcement, index) => (
+            {announcements.erer.map((announcement, index) => (
               <AnnouncementItem
                 key={index}
                 title={announcement.title}
-                content={announcement.content}
                 date={announcement.date}
+                url={announcement.url}
               />
             ))}
           </ul>

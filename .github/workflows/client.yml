@@ -52,7 +52,7 @@ jobs:
       - name: 푸시한 클라이언트 이미지 확인
         run: |
           echo "🔎 GHCR에 클라이언트 이미지 확인 중..."
-          curl -H "Authorization: Bearer ${{ secrets.GHCR_TOKEN }}" https://ghcr.io/v2/${{ secrets.GHCR_USERNAME }}/erer-client/tags/list || {
+          curl -H "Authorization: token ${{ secrets.GHCR_TOKEN }}" https://ghcr.io/v2/${{ secrets.GHCR_USERNAME }}/erer-client/tags/list || {
             echo "❌ GHCR에서 클라이언트 이미지 확인 실패"
             exit 1
           }
